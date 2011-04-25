@@ -1480,8 +1480,8 @@ static int inode_has_perm(const struct cred *cred,
 
 	if (!adp) {
 		adp = &ad;
-		COMMON_AUDIT_DATA_INIT(&ad, FS);
-		ad.u.fs.inode = inode;
+		COMMON_AUDIT_DATA_INIT(&ad, INODE);
+		ad.u.inode = inode;
 	}
 
 	return avc_has_perm(sid, isec->sid, isec->sclass, perms, adp);
@@ -1498,10 +1498,17 @@ static inline int dentry_has_perm(const struct cred *cred,
 	struct inode *inode = dentry->d_inode;
 	struct common_audit_data ad;
 
+<<<<<<< HEAD
 	COMMON_AUDIT_DATA_INIT(&ad, FS);
 	ad.u.fs.path.mnt = mnt;
 	ad.u.fs.path.dentry = dentry;
 	return inode_has_perm(cred, inode, av, &ad);
+=======
+	COMMON_AUDIT_DATA_INIT(&ad, PATH);
+	ad.u.path.mnt = mnt;
+	ad.u.path.dentry = dentry;
+	return inode_has_perm(cred, inode, av, &ad, 0);
+>>>>>>> f48b739... LSM: split LSM_AUDIT_DATA_FS into _PATH and _INODE
 }
 
 /* Check whether a task can use an open file descriptor to
@@ -1522,8 +1529,8 @@ static int file_has_perm(const struct cred *cred,
 	u32 sid = cred_sid(cred);
 	int rc;
 
-	COMMON_AUDIT_DATA_INIT(&ad, FS);
-	ad.u.fs.path = file->f_path;
+	COMMON_AUDIT_DATA_INIT(&ad, PATH);
+	ad.u.path = file->f_path;
 
 	if (sid != fsec->sid) {
 		rc = avc_has_perm(sid, fsec->sid,
@@ -1561,8 +1568,8 @@ static int may_create(struct inode *dir,
 	sid = tsec->sid;
 	newsid = tsec->create_sid;
 
-	COMMON_AUDIT_DATA_INIT(&ad, FS);
-	ad.u.fs.path.dentry = dentry;
+	COMMON_AUDIT_DATA_INIT(&ad, PATH);
+	ad.u.path.dentry = dentry;
 
 	rc = avc_has_perm(sid, dsec->sid, SECCLASS_DIR,
 			  DIR__ADD_NAME | DIR__SEARCH,
@@ -1613,8 +1620,8 @@ static int may_link(struct inode *dir,
 	dsec = dir->i_security;
 	isec = dentry->d_inode->i_security;
 
-	COMMON_AUDIT_DATA_INIT(&ad, FS);
-	ad.u.fs.path.dentry = dentry;
+	COMMON_AUDIT_DATA_INIT(&ad, PATH);
+	ad.u.path.dentry = dentry;
 
 	av = DIR__SEARCH;
 	av |= (kind ? DIR__REMOVE_NAME : DIR__ADD_NAME);
@@ -1659,9 +1666,9 @@ static inline int may_rename(struct inode *old_dir,
 	old_is_dir = S_ISDIR(old_dentry->d_inode->i_mode);
 	new_dsec = new_dir->i_security;
 
-	COMMON_AUDIT_DATA_INIT(&ad, FS);
+	COMMON_AUDIT_DATA_INIT(&ad, PATH);
 
-	ad.u.fs.path.dentry = old_dentry;
+	ad.u.path.dentry = old_dentry;
 	rc = avc_has_perm(sid, old_dsec->sid, SECCLASS_DIR,
 			  DIR__REMOVE_NAME | DIR__SEARCH, &ad);
 	if (rc)
@@ -1677,7 +1684,7 @@ static inline int may_rename(struct inode *old_dir,
 			return rc;
 	}
 
-	ad.u.fs.path.dentry = new_dentry;
+	ad.u.path.dentry = new_dentry;
 	av = DIR__ADD_NAME | DIR__SEARCH;
 	if (new_dentry->d_inode)
 		av |= DIR__REMOVE_NAME;
@@ -2000,8 +2007,8 @@ static int selinux_bprm_set_creds(struct linux_binprm *bprm)
 			return rc;
 	}
 
-	COMMON_AUDIT_DATA_INIT(&ad, FS);
-	ad.u.fs.path = bprm->file->f_path;
+	COMMON_AUDIT_DATA_INIT(&ad, PATH);
+	ad.u.path = bprm->file->f_path;
 
 	if (bprm->file->f_path.mnt->mnt_flags & MNT_NOSUID)
 		new_tsec->sid = old_tsec->sid;
@@ -2129,7 +2136,7 @@ static inline void flush_unauthorized_files(const struct cred *cred,
 
 	/* Revalidate access to inherited open files. */
 
-	COMMON_AUDIT_DATA_INIT(&ad, FS);
+	COMMON_AUDIT_DATA_INIT(&ad, INODE);
 
 	spin_lock(&files->file_lock);
 	for (;;) {
@@ -2392,8 +2399,8 @@ static int selinux_sb_kern_mount(struct super_block *sb, int flags, void *data)
 	if (flags & MS_KERNMOUNT)
 		return 0;
 
-	COMMON_AUDIT_DATA_INIT(&ad, FS);
-	ad.u.fs.path.dentry = sb->s_root;
+	COMMON_AUDIT_DATA_INIT(&ad, PATH);
+	ad.u.path.dentry = sb->s_root;
 	return superblock_has_perm(cred, sb, FILESYSTEM__MOUNT, &ad);
 }
 
@@ -2402,8 +2409,8 @@ static int selinux_sb_statfs(struct dentry *dentry)
 	const struct cred *cred = current_cred();
 	struct common_audit_data ad;
 
-	COMMON_AUDIT_DATA_INIT(&ad, FS);
-	ad.u.fs.path.dentry = dentry->d_sb->s_root;
+	COMMON_AUDIT_DATA_INIT(&ad, PATH);
+	ad.u.path.dentry = dentry->d_sb->s_root;
 	return superblock_has_perm(cred, dentry->d_sb, FILESYSTEM__GETATTR, &ad);
 }
 
@@ -2577,12 +2584,17 @@ static int selinux_inode_permission(struct inode *inode, int mask, unsigned flag
 	if (!mask)
 		return 0;
 
+<<<<<<< HEAD
 	/* May be droppable after audit */
 	if (flags & IPERM_FLAG_RCU)
 		return -ECHILD;
 
 	COMMON_AUDIT_DATA_INIT(&ad, FS);
 	ad.u.fs.inode = inode;
+=======
+	COMMON_AUDIT_DATA_INIT(&ad, INODE);
+	ad.u.inode = inode;
+>>>>>>> f48b739... LSM: split LSM_AUDIT_DATA_FS into _PATH and _INODE
 
 	if (from_access)
 		ad.selinux_audit_data.auditdeny |= FILE__AUDIT_ACCESS;
@@ -2660,8 +2672,8 @@ static int selinux_inode_setxattr(struct dentry *dentry, const char *name,
 	if (!is_owner_or_cap(inode))
 		return -EPERM;
 
-	COMMON_AUDIT_DATA_INIT(&ad, FS);
-	ad.u.fs.path.dentry = dentry;
+	COMMON_AUDIT_DATA_INIT(&ad, PATH);
+	ad.u.path.dentry = dentry;
 
 	rc = avc_has_perm(sid, isec->sid, isec->sclass,
 			  FILE__RELABELFROM, &ad);

@@ -520,6 +520,21 @@ void avc_audit(u32 ssid, u32 tsid,
 		a = &stack_data;
 		COMMON_AUDIT_DATA_INIT(a, NONE);
 	}
+<<<<<<< HEAD
+=======
+
+	/*
+	 * When in a RCU walk do the audit on the RCU retry.  This is because
+	 * the collection of the dname in an inode audit message is not RCU
+	 * safe.  Note this may drop some audits when the situation changes
+	 * during retry. However this is logically just as if the operation
+	 * happened a little later.
+	 */
+	if ((a->type == LSM_AUDIT_DATA_INODE) &&
+	    (flags & IPERM_FLAG_RCU))
+		return -ECHILD;
+
+>>>>>>> f48b739... LSM: split LSM_AUDIT_DATA_FS into _PATH and _INODE
 	a->selinux_audit_data.tclass = tclass;
 	a->selinux_audit_data.requested = requested;
 	a->selinux_audit_data.ssid = ssid;
