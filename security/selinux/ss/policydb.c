@@ -477,8 +477,25 @@ static int policydb_index_others(struct policydb *p)
 	p->user_val_to_struct =
 		kmalloc(p->p_users.nprim * sizeof(*(p->user_val_to_struct)),
 			GFP_KERNEL);
+<<<<<<< HEAD
 	if (!p->user_val_to_struct) {
 		rc = -ENOMEM;
+=======
+	if (!p->user_val_to_struct)
+		goto out;
+
+	/* Yes, I want the sizeof the pointer, not the structure */
+	rc = -ENOMEM;
+	p->type_val_to_struct_array = flex_array_alloc(sizeof(struct type_datum *),
+						       p->p_types.nprim,
+						       GFP_KERNEL | __GFP_ZERO);
+	if (!p->type_val_to_struct_array)
+		goto out;
+
+	rc = flex_array_prealloc(p->type_val_to_struct_array, 0,
+				 p->p_types.nprim, GFP_KERNEL | __GFP_ZERO);
+	if (rc)
+>>>>>>> 5a3ea87... flex_array: flex_array_prealloc takes a number of elements, not an end
 		goto out;
 	}
 
@@ -495,11 +512,18 @@ static int policydb_index_others(struct policydb *p)
 		goto out;
 	}
 
+<<<<<<< HEAD
 	for (i = SYM_ROLES; i < SYM_NUM; i++) {
 		p->sym_val_to_name[i] =
 			kmalloc(p->symtab[i].nprim * sizeof(char *), GFP_KERNEL);
 		if (!p->sym_val_to_name[i]) {
 			rc = -ENOMEM;
+=======
+		rc = flex_array_prealloc(p->sym_val_to_name[i],
+					 0, p->symtab[i].nprim,
+					 GFP_KERNEL | __GFP_ZERO);
+		if (rc)
+>>>>>>> 5a3ea87... flex_array: flex_array_prealloc takes a number of elements, not an end
 			goto out;
 		}
 		rc = hashtab_map(p->symtab[i].table, index_f[i], p);
@@ -2206,8 +2230,22 @@ int policydb_read(struct policydb *p, void *fp)
 	if (rc)
 		goto bad;
 
+<<<<<<< HEAD
 	p->type_attr_map = kmalloc(p->p_types.nprim * sizeof(struct ebitmap), GFP_KERNEL);
 	if (!p->type_attr_map)
+=======
+	rc = -ENOMEM;
+	p->type_attr_map_array = flex_array_alloc(sizeof(struct ebitmap),
+						  p->p_types.nprim,
+						  GFP_KERNEL | __GFP_ZERO);
+	if (!p->type_attr_map_array)
+		goto bad;
+
+	/* preallocate so we don't have to worry about the put ever failing */
+	rc = flex_array_prealloc(p->type_attr_map_array, 0, p->p_types.nprim,
+				 GFP_KERNEL | __GFP_ZERO);
+	if (rc)
+>>>>>>> 5a3ea87... flex_array: flex_array_prealloc takes a number of elements, not an end
 		goto bad;
 
 	for (i = 0; i < p->p_types.nprim; i++) {
