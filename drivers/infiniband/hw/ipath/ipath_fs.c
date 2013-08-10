@@ -359,13 +359,13 @@ bail:
 	return ret;
 }
 
-static struct dentry *ipathfs_mount(struct file_system_type *fs_type,
-			int flags, const char *dev_name, void *data)
+static int ipathfs_get_sb(struct file_system_type *fs_type, int flags,
+			const char *dev_name, void *data, struct vfsmount *mnt)
 {
-	struct dentry *ret;
-	ret = mount_single(fs_type, flags, data, ipathfs_fill_super);
-	if (!IS_ERR(ret))
-		ipath_super = ret->d_sb;
+	int ret = get_sb_single(fs_type, flags, data,
+				    ipathfs_fill_super, mnt);
+	if (ret >= 0)
+		ipath_super = mnt->mnt_sb;
 	return ret;
 }
 
@@ -408,7 +408,7 @@ bail:
 static struct file_system_type ipathfs_fs_type = {
 	.owner =	THIS_MODULE,
 	.name =		"ipathfs",
-	.mount =	ipathfs_mount,
+	.get_sb =	ipathfs_get_sb,
 	.kill_sb =	ipathfs_kill_super,
 };
 

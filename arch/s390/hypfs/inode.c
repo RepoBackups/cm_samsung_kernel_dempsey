@@ -316,10 +316,10 @@ static int hypfs_fill_super(struct super_block *sb, void *data, int silent)
 	return 0;
 }
 
-static struct dentry *hypfs_mount(struct file_system_type *fst, int flags,
-			const char *devname, void *data)
+static int hypfs_get_super(struct file_system_type *fst, int flags,
+			const char *devname, void *data, struct vfsmount *mnt)
 {
-	return mount_single(fst, flags, data, hypfs_fill_super);
+	return get_sb_single(fst, flags, data, hypfs_fill_super, mnt);
 }
 
 static void hypfs_kill_super(struct super_block *sb)
@@ -454,7 +454,7 @@ static const struct file_operations hypfs_file_ops = {
 static struct file_system_type hypfs_type = {
 	.owner		= THIS_MODULE,
 	.name		= "s390_hypfs",
-	.mount		= hypfs_mount,
+	.get_sb		= hypfs_get_super,
 	.kill_sb	= hypfs_kill_super
 };
 

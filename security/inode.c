@@ -130,17 +130,17 @@ static int fill_super(struct super_block *sb, void *data, int silent)
 	return simple_fill_super(sb, SECURITYFS_MAGIC, files);
 }
 
-static struct dentry *get_sb(struct file_system_type *fs_type,
+static int get_sb(struct file_system_type *fs_type,
 		  int flags, const char *dev_name,
-		  void *data)
+		  void *data, struct vfsmount *mnt)
 {
-	return mount_single(fs_type, flags, data, fill_super);
+	return get_sb_single(fs_type, flags, data, fill_super, mnt);
 }
 
 static struct file_system_type fs_type = {
 	.owner =	THIS_MODULE,
 	.name =		"securityfs",
-	.mount =	get_sb,
+	.get_sb =	get_sb,
 	.kill_sb =	kill_litter_super,
 };
 

@@ -1178,9 +1178,9 @@ invalid:
 
 /* "mount -t functionfs dev_name /dev/function" ends up here */
 
-static struct dentry *
-ffs_fs_mount(struct file_system_type *t, int flags,
-	      const char *dev_name, void *opts)
+static int
+ffs_fs_get_sb(struct file_system_type *t, int flags,
+	      const char *dev_name, void *opts, struct vfsmount *mnt)
 {
 	struct ffs_sb_fill_data data = {
 		.perms = {
@@ -1196,14 +1196,14 @@ ffs_fs_mount(struct file_system_type *t, int flags,
 
 	ret = functionfs_check_dev_callback(dev_name);
 	if (unlikely(ret < 0))
-		return ERR_PTR(ret);
+		return ret;
 
 	ret = ffs_fs_parse_opts(&data, opts);
 	if (unlikely(ret < 0))
-		return ERR_PTR(ret);
+		return ret;
 
 	data.dev_name = dev_name;
-	return mount_single(t, flags, &data, ffs_sb_fill);
+	return get_sb_single(t, flags, &data, ffs_sb_fill, mnt);
 }
 
 static void
@@ -1222,7 +1222,7 @@ ffs_fs_kill_sb(struct super_block *sb)
 static struct file_system_type ffs_fs_type = {
 	.owner		= THIS_MODULE,
 	.name		= "functionfs",
-	.mount		= ffs_fs_mount,
+	.get_sb		= ffs_fs_get_sb,
 	.kill_sb	= ffs_fs_kill_sb,
 };
 
