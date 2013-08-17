@@ -204,7 +204,6 @@ static int bcmsdh_sdmmc_suspend(struct device *pdev)
 #if defined (CUSTOMER_HW_SAMSUNG) && defined (CONFIG_ARCH_TEGRA)
 	irq_set_irq_wake(390, 1);
 #endif
-	smp_mb();
 
 	sdio_flags = sdio_get_host_pm_caps(func);
 
@@ -223,6 +222,7 @@ static int bcmsdh_sdmmc_suspend(struct device *pdev)
   	}
 
   	dhd_mmc_suspend = TRUE;
+	smp_mb();
 
 out:
   	return ret;
