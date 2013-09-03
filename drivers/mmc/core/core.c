@@ -40,6 +40,7 @@
 
 static struct workqueue_struct *workqueue;
 static struct wake_lock mmc_delayed_work_wake_lock;
+atomic_t wakelock_refs = ATOMIC_INIT(0);
 
 /*
  * Enabling software CRCs on the data blocks can be a significant (30%)
@@ -71,8 +72,15 @@ MODULE_PARM_DESC(
 static int mmc_schedule_delayed_work(struct delayed_work *work,
 				     unsigned long delay)
 {
+	int ret;
+
 	wake_lock(&mmc_delayed_work_wake_lock);
-	return queue_delayed_work(workqueue, work, delay);
+	atomic_inc(&wakelock_refs);
+	ret = queue_delayed_work(workqueue, work, delay);
+	if (!ret && atomic_dec_and_test(&wakelock_refs))	{
+		wake_unlock(&mmc_delayed_work_wake_lock);
+	}
+	return ret;
 }
 
 /*
@@ -112,7 +120,7 @@ void mmc_request_done(struct mmc_host *host, struct mmc_request *mrq)
 	}
 
 	if (err && cmd->retries) {
-		pr_debug("%s: req failed (CMD%u): %d, retrying...\n",
+		printk("%s: req failed (CMD%u): %d, retrying...\n",
 			mmc_hostname(host), cmd->opcode, err);
 
 		cmd->retries--;
@@ -127,9 +135,18 @@ void mmc_request_done(struct mmc_host *host, struct mmc_request *mrq)
 			cmd->resp[2], cmd->resp[3]);
 
 		if (mrq->data) {
+//[NAGSM_Android_HDLNC_SDcard_shinjonghyun_20100507 : add LOG for MoviNAND debuging	
+		/*
 			pr_debug("%s:     %d bytes transferred: %d\n",
 				mmc_hostname(host),
 				mrq->data->bytes_xfered, mrq->data->error);
+		*/
+			if(mrq->data->error != 0){
+				printk("%s:     %d bytes transferred: %d\n",
+					mmc_hostname(host),
+					mrq->data->bytes_xfered, mrq->data->error);
+			}
+//]NAGSM_Android_HDLNC_SDcard_shinjonghyun_20100507 : add LOG for MoviNAND debuging
 		}
 
 		if (mrq->stop) {
@@ -280,7 +297,10 @@ void mmc_set_data_timeout(struct mmc_data *data, const struct mmc_card *card)
 	 * SDIO cards only define an upper 1 s limit on access.
 	 */
 	if (mmc_card_sdio(card)) {
-		data->timeout_ns = 1000000000;
+		if (card->host->caps & MMC_CAP_ATHEROS_WIFI)
+			data->timeout_ns = 2000000000;
+		else
+			data->timeout_ns = 1000000000;
 		data->timeout_clks = 0;
 		return;
 	}
@@ -921,7 +941,10 @@ static void mmc_power_up(struct mmc_host *host)
 	 * This delay should be sufficient to allow the power supply
 	 * to reach the minimum voltage.
 	 */
-	mmc_delay(10);
+	if (host->caps & MMC_CAP_ATHEROS_WIFI)
+		mmc_delay(400);
+	else
+		mmc_delay(10);
 
 	host->ios.clock = host->f_min;
 
@@ -1105,10 +1128,20 @@ void mmc_rescan(struct work_struct *work)
 
 	if (host->rescan_disable) {
 		spin_unlock_irqrestore(&host->lock, flags);
+		if (atomic_dec_return(&wakelock_refs) > 0) {
+			printk(KERN_DEBUG "Another host want the wakelock : %d\n", atomic_read(&wakelock_refs));
+		}else {
+			printk(KERN_DEBUG "unlock case1 : mmc%d: wake_lock_timeout 0.5 sec %d\n", host->index, atomic_read(&wakelock_refs));
+			wake_lock_timeout(&mmc_delayed_work_wake_lock, msecs_to_jiffies(500));
+		}
 		return;
 	}
 
 	spin_unlock_irqrestore(&host->lock, flags);
+
+//[NAGSM_Android_HDLNC_SDcard_shinjonghyun_20100504 : mutual exclusion when MoviNand and SD cardusing using this funtion
+//	mutex_lock(&host->carddetect_lock); 
+//]NAGSM_Android_HDLNC_SDcard_shinjonghyun_20100504 : mutual exclusion when MoviNand and SD cardusing using this funtion	
 
 	mmc_bus_get(host);
 
@@ -1136,6 +1169,8 @@ void mmc_rescan(struct work_struct *work)
 
 
 	mmc_bus_get(host);
+
+	printk(KERN_DEBUG "*** DEBUG : start %s (mmc%d)***\n", __func__, host->index);
 
 	/* if there still is a card present, stop here */
 	if (host->bus_ops != NULL) {
@@ -1165,6 +1200,7 @@ void mmc_rescan(struct work_struct *work)
 	/*
 	 * First we search for SDIO...
 	 */
+	printk(KERN_DEBUG "*** DEBUG : First we search for SDIO...(%d)***\n", host->index);
 	err = mmc_send_io_op_cond(host, 0, &ocr);
 	if (!err) {
 		if (mmc_attach_sdio(host, ocr))
@@ -1176,6 +1212,7 @@ void mmc_rescan(struct work_struct *work)
 	/*
 	 * ...then normal SD...
 	 */
+	printk(KERN_DEBUG "*** DEBUG : ...then normal SD...(%d) ***\n", host->index);
 	err = mmc_send_app_op_cond(host, 0, &ocr);
 	if (!err) {
 		if (mmc_attach_sd(host, ocr))
@@ -1187,6 +1224,7 @@ void mmc_rescan(struct work_struct *work)
 	/*
 	 * ...and finally MMC.
 	 */
+	printk(KERN_DEBUG "*** DEBUG : ...and finally MMC. (%d)***\n", host->index);
 	err = mmc_send_op_cond(host, 0, &ocr);
 	if (!err) {
 		if (mmc_attach_mmc(host, ocr))
@@ -1195,17 +1233,33 @@ void mmc_rescan(struct work_struct *work)
 		goto out;
 	}
 
+	printk(KERN_DEBUG "*** DEBUG : end %s (mmc%d)***\n", __func__, host->index);
+
 	mmc_release_host(host);
 	mmc_power_off(host);
 
 out:
-	if (extend_wakelock)
-		wake_lock_timeout(&mmc_delayed_work_wake_lock, HZ / 2);
-	else
-		wake_unlock(&mmc_delayed_work_wake_lock);
+#if 0
+	//if (extend_wakelock)
+	//	wake_lock_timeout(&mmc_delayed_work_wake_lock, HZ / 2);
+	//else
+	//	wake_unlock(&mmc_delayed_work_wake_lock);
+#else
+	if (atomic_dec_return(&wakelock_refs) > 0) {
+		printk(KERN_DEBUG "Another host want the wakelock : %d\n", atomic_read(&wakelock_refs));
+	}
+	else {
+		printk(KERN_DEBUG "unlock case2 : mmc%d: wake_lock_timeout 0.5 sec %d\n", host->index, atomic_read(&wakelock_refs));
+		wake_lock_timeout(&mmc_delayed_work_wake_lock, msecs_to_jiffies(500));
+	}
+#endif
 
 	if (host->caps & MMC_CAP_NEEDS_POLL)
 		mmc_schedule_delayed_work(&host->detect, HZ);
+//[NAGSM_Android_HDLNC_SDcard_shinjonghyun_20100504 : mutual exclusion when MoviNand and SD cardusing using this funtion
+//	mutex_unlock(&host->carddetect_lock); 
+//]NAGSM_Android_HDLNC_SDcard_shinjonghyun_20100504 : mutual exclusion when MoviNand and SD cardusing using this funtion
+
 }
 
 void mmc_start_host(struct mmc_host *host)
@@ -1225,7 +1279,9 @@ void mmc_stop_host(struct mmc_host *host)
 
 	if (host->caps & MMC_CAP_DISABLE)
 		cancel_delayed_work(&host->disable);
-	cancel_delayed_work_sync(&host->detect);
+	if (unlikely(cancel_delayed_work(&host->detect)))	{
+		atomic_dec(&wakelock_refs);
+	}
 	mmc_flush_scheduled_work();
 
 	/* clear pm flags now and let card drivers set them as needed */
@@ -1345,7 +1401,9 @@ int mmc_suspend_host(struct mmc_host *host)
 
 	if (host->caps & MMC_CAP_DISABLE)
 		cancel_delayed_work(&host->disable);
-	cancel_delayed_work(&host->detect);
+	if (unlikely(cancel_delayed_work(&host->detect)))	{
+		atomic_dec(&wakelock_refs);
+	}
 	mmc_flush_scheduled_work();
 
 	mmc_bus_get(host);
@@ -1362,7 +1420,6 @@ int mmc_suspend_host(struct mmc_host *host)
 			mmc_claim_host(host);
 			mmc_detach_bus(host);
 			mmc_release_host(host);
-			host->pm_flags = 0;
 			err = 0;
 		}
 		flush_delayed_work(&host->disable);
@@ -1461,10 +1518,8 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 		}
 		host->rescan_disable = 0;
 		spin_unlock_irqrestore(&host->lock, flags);
-#ifndef CONFIG_SAMSUNG_FASCINATE
 		if (!host->card || host->card->type != MMC_TYPE_SDIO)
-#endif
-			mmc_detect_change(host, 0);
+		mmc_detect_change(host, 1);
 
 	}
 
