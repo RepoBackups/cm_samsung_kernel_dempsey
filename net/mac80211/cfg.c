@@ -358,6 +358,7 @@ static void sta_set_sinfo(struct sta_info *sta, struct station_info *sinfo)
 			STATION_INFO_TX_PACKETS |
 			STATION_INFO_RX_BITRATE |
 			STATION_INFO_TX_BITRATE |
+			STATION_INFO_BSS_PARAM |
 			STATION_INFO_CONNECTED_TIME;
 
 	do_posix_clock_monotonic_gettime(&uptime);
@@ -405,6 +406,16 @@ static void sta_set_sinfo(struct sta_info *sta, struct station_info *sinfo)
 		sinfo->plink_state = sta->plink_state;
 #endif
 	}
+
+sinfo->bss_param.flags = 0;
+  if (sdata->vif.bss_conf.use_cts_prot)
+    sinfo->bss_param.flags |= BSS_PARAM_FLAGS_CTS_PROT;
+  if (sdata->vif.bss_conf.use_short_preamble)
+    sinfo->bss_param.flags |= BSS_PARAM_FLAGS_SHORT_PREAMBLE;
+  if (sdata->vif.bss_conf.use_short_slot)
+    sinfo->bss_param.flags |= BSS_PARAM_FLAGS_SHORT_SLOT_TIME;
+  sinfo->bss_param.dtim_period = sdata->local->hw.conf.ps_dtim_period;
+  sinfo->bss_param.beacon_interval = sdata->vif.bss_conf.beacon_int;
 }
 
 
