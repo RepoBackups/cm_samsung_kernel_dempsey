@@ -1,21 +1,32 @@
-/*
- * include/asm-xtensa/rwsem.h
+/* rwsem.h: R/W semaphores implemented using ARM atomic functions.
  *
- * This file is subject to the terms and conditions of the GNU General Public
- * License.  See the file "COPYING" in the main directory of this archive
- * for more details.
+ * Copyright (c) 2010, Code Aurora Forum. All rights reserved.
  *
- * Largely copied from include/asm-ppc/rwsem.h
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
  *
- * Copyright (C) 2001 - 2005 Tensilica Inc.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301, USA.
  */
 
-#ifndef _XTENSA_RWSEM_H
-#define _XTENSA_RWSEM_H
+#ifndef _ASM_ARM_RWSEM_H
+#define _ASM_ARM_RWSEM_H
 
 #ifndef _LINUX_RWSEM_H
-#error "Please don't include <asm/rwsem.h> directly, use <linux/rwsem.h> instead."
+#error "please don't include asm/rwsem.h directly, use linux/rwsem.h instead"
 #endif
+
+#ifdef __KERNEL__
+#include <asm/atomic.h>
+#include <asm/system.h>
 
 #define RWSEM_UNLOCKED_VALUE		0x00000000
 #define RWSEM_ACTIVE_BIAS		0x00000001
@@ -24,14 +35,22 @@
 #define RWSEM_ACTIVE_READ_BIAS		RWSEM_ACTIVE_BIAS
 #define RWSEM_ACTIVE_WRITE_BIAS		(RWSEM_WAITING_BIAS + RWSEM_ACTIVE_BIAS)
 
+extern void __init_rwsem(struct rw_semaphore *sem, const char *name,
+       struct lock_class_key *key);
+
+#define init_rwsem(sem)        \
+do {            \
+  static struct lock_class_key __key;  \
+            \
+  __init_rwsem((sem), #sem, &__key);  \
+} while (0)
+
 /*
  * lock for reading
  */
 static inline void __down_read(struct rw_semaphore *sem)
 {
-	if (atomic_add_return(1,(atomic_t *)(&sem->count)) > 0)
-		smp_wmb();
-	else
+	if (atomic_inc_return((atomic_t *)(&sem->count)) < 0)
 		rwsem_down_read_failed(sem);
 }
 
@@ -42,7 +61,6 @@ static inline int __down_read_trylock(struct rw_semaphore *sem)
 	while ((tmp = sem->count) >= 0) {
 		if (tmp == cmpxchg(&sem->count, tmp,
 				   tmp + RWSEM_ACTIVE_READ_BIAS)) {
-			smp_wmb();
 			return 1;
 		}
 	}
@@ -58,9 +76,7 @@ static inline void __down_write(struct rw_semaphore *sem)
 
 	tmp = atomic_add_return(RWSEM_ACTIVE_WRITE_BIAS,
 				(atomic_t *)(&sem->count));
-	if (tmp == RWSEM_ACTIVE_WRITE_BIAS)
-		smp_wmb();
-	else
+	if (tmp != RWSEM_ACTIVE_WRITE_BIAS)
 		rwsem_down_write_failed(sem);
 }
 
@@ -70,7 +86,6 @@ static inline int __down_write_trylock(struct rw_semaphore *sem)
 
 	tmp = cmpxchg(&sem->count, RWSEM_UNLOCKED_VALUE,
 		      RWSEM_ACTIVE_WRITE_BIAS);
-	smp_wmb();
 	return tmp == RWSEM_UNLOCKED_VALUE;
 }
 
@@ -81,8 +96,7 @@ static inline void __up_read(struct rw_semaphore *sem)
 {
 	int tmp;
 
-	smp_wmb();
-	tmp = atomic_sub_return(1,(atomic_t *)(&sem->count));
+	tmp = atomic_dec_return((atomic_t *)(&sem->count));
 	if (tmp < -1 && (tmp & RWSEM_ACTIVE_MASK) == 0)
 		rwsem_wake(sem);
 }
@@ -92,7 +106,6 @@ static inline void __up_read(struct rw_semaphore *sem)
  */
 static inline void __up_write(struct rw_semaphore *sem)
 {
-	smp_wmb();
 	if (atomic_sub_return(RWSEM_ACTIVE_WRITE_BIAS,
 			      (atomic_t *)(&sem->count)) < 0)
 		rwsem_wake(sem);
@@ -113,10 +126,14 @@ static inline void __downgrade_write(struct rw_semaphore *sem)
 {
 	int tmp;
 
-	smp_wmb();
 	tmp = atomic_add_return(-RWSEM_WAITING_BIAS, (atomic_t *)(&sem->count));
 	if (tmp < 0)
 		rwsem_downgrade_wake(sem);
+}
+
+static inline void __down_write_nested(struct rw_semaphore *sem, int subclass)
+{
+	__down_write(sem);
 }
 
 /*
@@ -124,8 +141,8 @@ static inline void __downgrade_write(struct rw_semaphore *sem)
  */
 static inline int rwsem_atomic_update(int delta, struct rw_semaphore *sem)
 {
-	smp_mb();
 	return atomic_add_return(delta, (atomic_t *)(&sem->count));
 }
 
-#endif	/* _XTENSA_RWSEM_H */
+#endif /* __KERNEL__ */
+#endif /* _ASM_ARM_RWSEM_H */
