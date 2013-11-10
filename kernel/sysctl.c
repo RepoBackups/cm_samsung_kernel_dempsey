@@ -83,6 +83,7 @@
 /* External variables not in a header file. */
 extern int sysctl_overcommit_memory;
 extern int sysctl_overcommit_ratio;
+extern int extra_free_kbytes;
 extern int max_threads;
 extern int core_uses_pid;
 extern int suid_dumpable;
@@ -1153,6 +1154,14 @@ static struct ctl_table vm_table[] = {
 		.proc_handler	= min_free_kbytes_sysctl_handler,
 		.extra1		= &zero,
 	},
+	{
+	    	.procname  = "extra_free_kbytes",
+	    	.data    = &extra_free_kbytes,
+	    	.maxlen    = sizeof(extra_free_kbytes),
+	    	.mode    = 0644,
+	    	.proc_handler  = min_free_kbytes_sysctl_handler,
+	    	.extra1    = &zero,
+  	},
 	{
 		.procname	= "min_free_order_shift",
 		.data		= &min_free_order_shift,
